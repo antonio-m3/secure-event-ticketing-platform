@@ -1,0 +1,41 @@
+# =============================================================================
+# Ingress — single external entrypoint.
+#   /        -> frontend (UI)
+#   /api     -> api      (the API strips the /api prefix internally)
+#
+# On OpenShift you can instead use a Route; on a kind/minikube cluster install
+# the NGINX ingress controller first. Adjust the host to your environment.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ticketing-ingress
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ticketing.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+  # TLS example (provide a cert Secret to enable HTTPS):
+  # tls:
+  #   - hosts: ["ticketing.local"]
+  #     secretName: ticketing-tls

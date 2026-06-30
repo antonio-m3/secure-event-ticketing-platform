@@ -1,0 +1,32 @@
+# Never ship dependencies, VCS metadata, secrets or docs into an image.
+**/node_modules
+**/npm-debug.log*
+**/.git
+**/.gitignore
+**/.github
+
+# Secrets / local env — must never end up in an image layer
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/secret*.yaml
+!infra/k8s/04-secret.example.yaml
+
+# Build / infra artifacts not needed at runtime
+docs
+infra/k8s
+scripts
+compose.yaml
+compose.*.yaml
+**/Containerfile
+**/Dockerfile
+**/.dockerignore
+
+# Editor / OS noise
+**/.vscode
+**/.idea
+**/.DS_Store
+**/coverage
+**/*.md

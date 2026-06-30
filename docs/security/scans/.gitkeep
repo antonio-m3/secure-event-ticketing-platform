@@ -1,0 +1,2 @@
+# Trivy sken rezultati se generiraju ovdje (scripts/trivy-scan.sh).
+# Stvarni .json/.sarif/.txt izlazi su git-ignorirani (vidi .gitignore).

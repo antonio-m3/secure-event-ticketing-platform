@@ -1,0 +1,78 @@
+# =============================================================================
+# Worker — background queue consumer. Data tier only, no Service (no inbound).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/name: worker
+    app.kubernetes.io/part-of: secure-event-ticketing
+    tier: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: worker
+        app.kubernetes.io/part-of: secure-event-ticketing
+        tier: data
+    spec:
+      serviceAccountName: ticketing-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          # Placeholder — CI sets this to ghcr.io/<owner>/ticketing-worker:<git-sha>
+          image: ghcr.io/OWNER/secure-event-ticketing-worker:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: ticketing-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ticketing-secret
+                  key: POSTGRES_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 96Mi
+            limits:
+              cpu: "300m"
+              memory: 256Mi
+          # No HTTP server — probe the process itself.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pgrep -f 'node src/worker.js' > /dev/null"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pgrep -f 'node src/worker.js' > /dev/null"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3

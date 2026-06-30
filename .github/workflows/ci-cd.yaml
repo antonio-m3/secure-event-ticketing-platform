@@ -1,0 +1,236 @@
+# =============================================================================
+# CI/CD — Secure Event Ticketing Platform
+# -----------------------------------------------------------------------------
+# Stages (shift-left security baked in):
+#   1. test        - install + test each Node service (matrix)
+#   2. build       - build immutable, git-SHA-tagged images for all 3 services
+#   3. image-scan  - Trivy image scan; HIGH/CRITICAL fixable => fail the build
+#   4. iac-scan    - Trivy config scan of Containerfiles + k8s manifests
+#   5. push        - push images to GHCR (only on push to main, after gates)
+#   6. deploy      - OPTIONAL; runs only when ENABLE_DEPLOY=true and creds exist
+#
+# No real secrets live in this file — everything sensitive comes from GitHub
+# Secrets / the automatically-provided GITHUB_TOKEN.
+# =============================================================================
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  # Image name prefix: ghcr.io/<owner>/<repo>-<service>
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write        # push to GHCR
+  security-events: write # upload SARIF to the Security tab
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Test each Node.js service
+  # ---------------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, frontend, worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies (${{ matrix.service }})
+        working-directory: ${{ matrix.service }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Lint (if configured)
+        working-directory: ${{ matrix.service }}
+        run: npm run lint --if-present
+
+      - name: Run tests (if configured)
+        working-directory: ${{ matrix.service }}
+        run: npm test --if-present
+
+      - name: Syntax smoke-check
+        working-directory: ${{ matrix.service }}
+        # Guards against a broken entrypoint even before unit tests exist.
+        run: node --check $(node -p "require('./package.json').main || 'src/server.js'")
+
+  # ---------------------------------------------------------------------------
+  # 2 + 3. Build images and scan them with Trivy (quality gate)
+  # ---------------------------------------------------------------------------
+  build-and-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, frontend, worker]
+    outputs:
+      sha_tag: ${{ steps.meta.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute immutable tags
+        id: meta
+        run: |
+          SHA_TAG="${GITHUB_SHA::12}"
+          IMAGE="${REGISTRY}/${IMAGE_PREFIX}-${{ matrix.service }}"
+          # Lowercase the image name (GHCR requires lowercase).
+          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build image (load locally, no push yet)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Containerfile
+          target: runtime
+          # Immutable tag = git SHA. We deliberately do NOT tag :latest for prod.
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan (quality gate)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+          format: table
+          # QUALITY GATE: fail the build on fixable HIGH/CRITICAL findings.
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Trivy image scan (SARIF for Security tab, non-blocking)
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+  # ---------------------------------------------------------------------------
+  # 4. IaC / config scan of Containerfiles and Kubernetes manifests
+  # ---------------------------------------------------------------------------
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy config scan (Dockerfiles + k8s manifests)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          # Trivy auto-detects Dockerfile/Containerfile and Kubernetes YAML.
+
+  # ---------------------------------------------------------------------------
+  # 5. Push images to GHCR — only on main, only after gates pass
+  # ---------------------------------------------------------------------------
+  push:
+    needs: [build-and-scan, iac-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, frontend, worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image ref
+        id: meta
+        run: |
+          SHA_TAG="${GITHUB_SHA::12}"
+          IMAGE="${REGISTRY}/${IMAGE_PREFIX}-${{ matrix.service }}"
+          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push (immutable git-SHA tag)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Containerfile
+          target: runtime
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # 6. Optional deploy — gated on ENABLE_DEPLOY + presence of a kubeconfig
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — require a kubeconfig secret
+        run: |
+          if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+            echo "KUBE_CONFIG secret not set — skipping deploy." >&2
+            exit 0
+          fi
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Set image tags and apply manifests
+        run: |
+          SHA_TAG="${GITHUB_SHA::12}"
+          PREFIX="$(echo "${REGISTRY}/${IMAGE_PREFIX}" | tr '[:upper:]' '[:lower:]')"
+          cd infra/k8s
+          kustomize edit set image \
+            ghcr.io/OWNER/secure-event-ticketing-api=${PREFIX}-api:${SHA_TAG} \
+            ghcr.io/OWNER/secure-event-ticketing-worker=${PREFIX}-worker:${SHA_TAG} \
+            ghcr.io/OWNER/secure-event-ticketing-frontend=${PREFIX}-frontend:${SHA_TAG}
+          kubectl apply -k .
+          kubectl -n ticketing rollout status deployment/api --timeout=120s
+          kubectl -n ticketing rollout status deployment/frontend --timeout=120s
+          kubectl -n ticketing rollout status deployment/worker --timeout=120s

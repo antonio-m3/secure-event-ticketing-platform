@@ -1,0 +1,44 @@
+# =============================================================================
+# Kustomization — apply the whole stack with:  kubectl apply -k infra/k8s
+#
+# CI overrides the image tags to immutable git-SHA references via:
+#   kustomize edit set image \
+#     ghcr.io/OWNER/secure-event-ticketing-api=ghcr.io/<owner>/...-api:<sha>
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ticketing
+
+resources:
+  - 00-namespace.yaml
+  - 01-resourcequota.yaml
+  - 02-limitrange.yaml
+  - 03-configmap.yaml
+  # 04-secret.example.yaml is intentionally NOT applied automatically — create
+  # the real Secret out-of-band (see the file header). Uncomment only for a
+  # throwaway demo cluster with placeholder values:
+  # - 04-secret.example.yaml
+  - 05-rbac.yaml
+  - 06-postgres.yaml
+  - 07-redis.yaml
+  - 08-api.yaml
+  - 09-worker.yaml
+  - 10-frontend.yaml
+  - 11-ingress.yaml
+  - 12-networkpolicy.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: secure-event-ticketing
+    # Do not inject into selectors — each Deployment defines its own.
+    includeSelectors: false
+
+# Default image tags. Override per environment / in CI.
+images:
+  - name: ghcr.io/OWNER/secure-event-ticketing-api
+    newTag: latest
+  - name: ghcr.io/OWNER/secure-event-ticketing-worker
+    newTag: latest
+  - name: ghcr.io/OWNER/secure-event-ticketing-frontend
+    newTag: latest

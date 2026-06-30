@@ -1,0 +1,18 @@
+# kind cluster config for local Kubernetes testing of this project.
+#
+# WHY unsafe-no-fsync: on some hosts (notably WSL2 ext4-on-vhdx) etcd's
+# fsync-heavy write pattern can overwhelm the virtual disk and trip
+# `errors=remount-ro`, knocking the API server offline. Disabling etcd fsync
+# removes that storm. This is SAFE ONLY for disposable local/dev clusters —
+# never for anything whose data you care about.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        etcd:
+          local:
+            extraArgs:
+              unsafe-no-fsync: "true"

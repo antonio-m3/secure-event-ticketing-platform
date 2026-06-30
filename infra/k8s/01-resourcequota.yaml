@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ticketing-quota
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  hard:
+    # Aggregate compute budget for the whole namespace. Keeps a noisy or
+    # mis-sized deployment from starving the cluster.
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    # Object count caps.
+    pods: "20"
+    persistentvolumeclaims: "4"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"

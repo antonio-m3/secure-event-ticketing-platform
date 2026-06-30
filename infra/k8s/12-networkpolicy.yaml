@@ -1,0 +1,209 @@
+# =============================================================================
+# NetworkPolicies — zero-trust segmentation inside the namespace.
+# Model: default-deny all ingress+egress, then open only required paths.
+#
+# Allowed flows:
+#   ingress-controller -> frontend (3000), api (8080)
+#   frontend -> api (8080)
+#   api      -> postgres (5432), redis (6379)
+#   worker   -> postgres (5432), redis (6379)
+#   all pods -> DNS (kube-dns, 53)
+# Everything else (incl. frontend -> postgres/redis) is denied.
+#
+# NOTE: NetworkPolicies require a CNI that enforces them (Calico, Cilium,
+# Weave, OpenShift SDN/OVN). On a plain kind/minikube they are accepted but
+# may not be enforced.
+# =============================================================================
+
+# 1) Default deny all ingress and egress for every pod in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2) Allow every pod to resolve DNS (egress to kube-dns on 53/UDP+TCP).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# 3) Frontend: accept traffic from the ingress controller; may talk to api only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-policy
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # Adjust the namespace label to match your ingress controller install.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# 4) API: accept from ingress controller and frontend; may reach postgres+redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-policy
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: frontend
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# 5) Worker: no ingress; may reach postgres+redis only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-policy
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: worker
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# 6) Postgres: accept only from api and worker on 5432; no egress needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: worker
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# 7) Redis: accept only from api and worker on 6379.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: worker
+      ports:
+        - protocol: TCP
+          port: 6379

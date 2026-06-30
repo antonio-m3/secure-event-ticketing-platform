@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketing-config
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+data:
+  # Non-secret configuration only. Secrets (passwords) live in the Secret.
+  NODE_ENV: "production"
+  API_PORT: "8080"
+  FRONTEND_PORT: "3000"
+
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "ticketing"
+  POSTGRES_USER: "ticketing_user"
+
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
+  QUEUE_NAME: "ticket_orders"
+
+  # Browser-facing API URL — adjust to the public Ingress host in a real
+  # deployment, e.g. https://ticketing.example.com/api
+  API_BASE_URL: "http://ticketing.local/api"

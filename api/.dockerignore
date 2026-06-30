@@ -1,0 +1,17 @@
+# Build context is the api/ directory — keep only what the image needs.
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+Containerfile
+Dockerfile
+.dockerignore
+.git
+.vscode
+.idea
+.DS_Store
+coverage
+*.md

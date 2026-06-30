@@ -1,0 +1,44 @@
+# =============================================================================
+# RBAC — least-privilege ServiceAccount for the application workloads.
+# The app does not call the Kubernetes API, so the Role grants only minimal,
+# read-only access (useful for troubleshooting/operators) and nothing more.
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ticketing-sa
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+# Do not auto-mount the API token — the app has no reason to call the API server.
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ticketing-reader
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+rules:
+  # Read-only visibility within the namespace for diagnostics. No write verbs,
+  # no access to secrets.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "endpoints", "services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ticketing-reader-binding
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/part-of: secure-event-ticketing
+subjects:
+  - kind: ServiceAccount
+    name: ticketing-sa
+    namespace: ticketing
+roleRef:
+  kind: Role
+  name: ticketing-reader
+  apiGroup: rbac.authorization.k8s.io

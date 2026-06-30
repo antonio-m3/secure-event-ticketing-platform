@@ -1,0 +1,160 @@
+# =============================================================================
+# PostgreSQL — persistent order store.
+# Persistence: PersistentVolumeClaim mounted at the data directory. A Deployment
+# with strategy Recreate is used (single writer; never two pods on one volume).
+# The schema is bootstrapped from a ConfigMap mounted into the init dir.
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: standard   # uncomment/set to match your cluster
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: secure-event-ticketing
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS ticket_orders (
+        id SERIAL PRIMARY KEY,
+        order_id TEXT UNIQUE NOT NULL,
+        event_id TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        status TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_ticket_orders_created_at ON ticket_orders (created_at DESC);
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: secure-event-ticketing
+    tier: data
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # one pod per RWO volume
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: secure-event-ticketing
+        tier: data
+    spec:
+      serviceAccountName: ticketing-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999       # postgres user in the official image
+        runAsGroup: 999
+        fsGroup: 999         # make the PVC writable by the postgres group
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: ticketing-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ticketing-secret
+                  key: POSTGRES_PASSWORD
+            # Store data in a subdirectory so the PVC root (lost+found) does
+            # not collide with initdb.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Root FS is read-only; all writable paths are explicit emptyDir/PVC
+            # mounts below (PGDATA on the PVC, socket dir, and /tmp).
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 192Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ticketing
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: secure-event-ticketing
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
