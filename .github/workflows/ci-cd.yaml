@@ -22,7 +22,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Image name prefix: ghcr.io/<owner>/<repo>-<service>
+  # Image name prefix: ghcr.io/antonio-m3/<repo>-<service>
   IMAGE_PREFIX: ${{ github.repository }}
 
 permissions:
@@ -227,9 +227,9 @@ jobs:
           PREFIX="$(echo "${REGISTRY}/${IMAGE_PREFIX}" | tr '[:upper:]' '[:lower:]')"
           cd infra/k8s
           kustomize edit set image \
-            ghcr.io/OWNER/secure-event-ticketing-api=${PREFIX}-api:${SHA_TAG} \
-            ghcr.io/OWNER/secure-event-ticketing-worker=${PREFIX}-worker:${SHA_TAG} \
-            ghcr.io/OWNER/secure-event-ticketing-frontend=${PREFIX}-frontend:${SHA_TAG}
+            ghcr.io/antonio-m3/secure-event-ticketing-platform-api=${PREFIX}-api:${SHA_TAG} \
+            ghcr.io/antonio-m3/secure-event-ticketing-platform-worker=${PREFIX}-worker:${SHA_TAG} \
+            ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend=${PREFIX}-frontend:${SHA_TAG}
           kubectl apply -k .
           kubectl -n ticketing rollout status deployment/api --timeout=120s
           kubectl -n ticketing rollout status deployment/frontend --timeout=120s

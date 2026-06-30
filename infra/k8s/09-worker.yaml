@@ -37,8 +37,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          # Placeholder — CI sets this to ghcr.io/<owner>/ticketing-worker:<git-sha>
-          image: ghcr.io/OWNER/secure-event-ticketing-worker:latest
+          # Placeholder — CI sets this to ghcr.io/antonio-m3/secure-event-ticketing-platform-worker:<git-sha>
+          image: ghcr.io/antonio-m3/secure-event-ticketing-platform-worker:latest
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

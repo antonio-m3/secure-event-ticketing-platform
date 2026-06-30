@@ -100,7 +100,7 @@ kubectl -n ticketing get deploy api -o jsonpath='{.spec.template.spec.containers
 ```bash
 # Postavi ispravan, postojeći nepromjenjivi tag
 kubectl -n ticketing set image deployment/api \
-  api=ghcr.io/<owner>/secure-event-ticketing-platform-api:<ispravan-sha>
+  api=ghcr.io/antonio-m3/secure-event-ticketing-platform-api:<ispravan-sha>
 
 # Za privatni registry — kreiraj i poveži pull secret
 kubectl -n ticketing create secret docker-registry ghcr-pull \

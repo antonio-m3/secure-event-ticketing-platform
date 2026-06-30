@@ -37,8 +37,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          # Placeholder — CI sets this to ghcr.io/<owner>/ticketing-frontend:<git-sha>
-          image: ghcr.io/OWNER/secure-event-ticketing-frontend:latest
+          # Placeholder — CI sets this to ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend:<git-sha>
+          image: ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

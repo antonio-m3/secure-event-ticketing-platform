@@ -72,9 +72,9 @@ kubectl -n ticketing create secret generic ticketing-secret \
 # Postavi prave image tagove (CI to radi automatski; ručno primjer):
 cd infra/k8s
 kustomize edit set image \
-  ghcr.io/OWNER/secure-event-ticketing-api=ghcr.io/<owner>/secure-event-ticketing-platform-api:<sha> \
-  ghcr.io/OWNER/secure-event-ticketing-worker=ghcr.io/<owner>/secure-event-ticketing-platform-worker:<sha> \
-  ghcr.io/OWNER/secure-event-ticketing-frontend=ghcr.io/<owner>/secure-event-ticketing-platform-frontend:<sha>
+  ghcr.io/antonio-m3/secure-event-ticketing-platform-api=ghcr.io/antonio-m3/secure-event-ticketing-platform-api:<sha> \
+  ghcr.io/antonio-m3/secure-event-ticketing-platform-worker=ghcr.io/antonio-m3/secure-event-ticketing-platform-worker:<sha> \
+  ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend=ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend:<sha>
 cd ../..
 
 kubectl apply -k infra/k8s
@@ -114,7 +114,7 @@ Aplikacijski Deploymenti koriste `RollingUpdate` s `maxUnavailable: 0` i
 ```bash
 # Primjer: ažuriranje api-ja na novi SHA tag
 kubectl -n ticketing set image deployment/api \
-  api=ghcr.io/<owner>/secure-event-ticketing-platform-api:<novi-sha>
+  api=ghcr.io/antonio-m3/secure-event-ticketing-platform-api:<novi-sha>
 kubectl -n ticketing rollout status deployment/api
 ```
 
@@ -130,7 +130,7 @@ kubectl -n ticketing rollout undo deployment/api
 # Ili na točno određenu reviziju / SHA tag
 kubectl -n ticketing rollout undo deployment/api --to-revision=3
 kubectl -n ticketing set image deployment/api \
-  api=ghcr.io/<owner>/secure-event-ticketing-platform-api:<stari-sha>
+  api=ghcr.io/antonio-m3/secure-event-ticketing-platform-api:<stari-sha>
 ```
 
 Budući da su tagovi nepromjenjivi (git SHA), rollback je deterministički.

@@ -3,7 +3,7 @@
 #
 # CI overrides the image tags to immutable git-SHA references via:
 #   kustomize edit set image \
-#     ghcr.io/OWNER/secure-event-ticketing-api=ghcr.io/<owner>/...-api:<sha>
+#     ghcr.io/antonio-m3/secure-event-ticketing-platform-api=ghcr.io/antonio-m3/...-api:<sha>
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -36,9 +36,9 @@ labels:
 
 # Default image tags. Override per environment / in CI.
 images:
-  - name: ghcr.io/OWNER/secure-event-ticketing-api
+  - name: ghcr.io/antonio-m3/secure-event-ticketing-platform-api
     newTag: latest
-  - name: ghcr.io/OWNER/secure-event-ticketing-worker
+  - name: ghcr.io/antonio-m3/secure-event-ticketing-platform-worker
     newTag: latest
-  - name: ghcr.io/OWNER/secure-event-ticketing-frontend
+  - name: ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend
     newTag: latest

@@ -45,9 +45,9 @@ kubectl -n ticketing create secret generic ticketing-secret \
 log "Applying manifests (local image override)"
 kustomize build infra/k8s \
   | sed -E \
-      -e 's#ghcr.io/OWNER/secure-event-ticketing-api:[^ ]+#ticketing-api:local#' \
-      -e 's#ghcr.io/OWNER/secure-event-ticketing-frontend:[^ ]+#ticketing-frontend:local#' \
-      -e 's#ghcr.io/OWNER/secure-event-ticketing-worker:[^ ]+#ticketing-worker:local#' \
+      -e 's#ghcr.io/antonio-m3/secure-event-ticketing-platform-api:[^ ]+#ticketing-api:local#' \
+      -e 's#ghcr.io/antonio-m3/secure-event-ticketing-platform-frontend:[^ ]+#ticketing-frontend:local#' \
+      -e 's#ghcr.io/antonio-m3/secure-event-ticketing-platform-worker:[^ ]+#ticketing-worker:local#' \
   | kubectl apply -f -
 
 log "Waiting for rollouts"
