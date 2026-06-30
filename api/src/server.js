@@ -123,16 +123,21 @@ app.get("/tickets/orders", async (_req, res) => {
     }
 });
 
-connectRedis()
-    .then(() => {
-        app.listen(port, () => {
-            console.log(`API listening on port ${port}`);
-        });
-    })
-    .catch((error) => {
+async function start() {
+    await connectRedis();
+    return app.listen(port, () => {
+        console.log(`API listening on port ${port}`);
+    });
+}
+
+// Only auto-start when run directly (node src/server.js); when this module is
+// required from a test, we just export `app` without connecting or listening.
+if (require.main === module) {
+    start().catch((error) => {
         console.error("Failed to start API:", error);
         process.exit(1);
     });
+}
 
 process.on("SIGTERM", async () => {
     await pgPool.end();
@@ -141,3 +146,6 @@ process.on("SIGTERM", async () => {
     }
     process.exit(0);
 });
+
+// Exported for tests (supertest) and potential programmatic use.
+module.exports = { app, start, pgPool, redisClient };
