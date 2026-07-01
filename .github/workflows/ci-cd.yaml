@@ -111,7 +111,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy image scan (quality gate)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
           format: table
@@ -119,11 +119,10 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          vuln-type: os,library
 
       - name: Trivy image scan (SARIF for Security tab, non-blocking)
         if: always()
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
           format: sarif
@@ -148,7 +147,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy config scan (Dockerfiles + k8s manifests)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           scan-type: config
           scan-ref: .
