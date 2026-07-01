@@ -110,24 +110,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
       - name: Trivy image scan (quality gate)
-        uses: aquasecurity/trivy-action@v0.30.0
-        with:
-          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
-          format: table
-          # QUALITY GATE: fail the build on fixable HIGH/CRITICAL findings.
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+        # QUALITY GATE: fail the build on fixable HIGH/CRITICAL findings.
+        run: |
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --format table \
+            "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}"
 
       - name: Trivy image scan (SARIF for Security tab, non-blocking)
         if: always()
-        uses: aquasecurity/trivy-action@v0.30.0
-        with:
-          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
-          format: sarif
-          output: trivy-${{ matrix.service }}.sarif
-          severity: HIGH,CRITICAL
+        continue-on-error: true
+        run: |
+          trivy image --scanners vuln --severity HIGH,CRITICAL \
+            --format sarif --output "trivy-${{ matrix.service }}.sarif" \
+            "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}"
 
       - name: Upload SARIF
         if: always()
@@ -146,15 +145,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
       - name: Trivy config scan (Dockerfiles + k8s manifests)
-        uses: aquasecurity/trivy-action@v0.30.0
-        with:
-          scan-type: config
-          scan-ref: .
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          # Trivy auto-detects Dockerfile/Containerfile and Kubernetes YAML.
+        # Trivy auto-detects Dockerfile/Containerfile and Kubernetes YAML.
+        run: trivy config --severity HIGH,CRITICAL --exit-code 1 .
 
   # ---------------------------------------------------------------------------
   # 5. Push images to GHCR — only on main, only after gates pass
